@@ -19,19 +19,21 @@ class ChibbisCommentApp:
         main_frame.pack(fill=tk.BOTH, expand=True)
 
         # Создание фрейма для загрузки файла
+        # Создание фрейма для загрузки файла
         upload_frame = ttk.Frame(main_frame, style="Upload.TFrame")
         upload_frame.pack(fill=tk.X, padx=20, pady=(30, 15))
 
         ttk.Label(upload_frame, text="Загрузить файл:",
-                  font=("Arial", 12, "bold"), background="#4682B4").pack(side=tk.LEFT)
+                  font=("Arial", 12, "bold"), background="#4682B4").pack(fill=tk.X, pady=(0, 10))
 
         self.file_path = tk.StringVar()
-        file_entry = ttk.Entry(upload_frame, textvariable=self.file_path, width=40, font=("Arial", 12))
-        file_entry.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=10)
+        file_entry = ttk.Entry(upload_frame, textvariable=self.file_path, width=40, font=("Arial", 12),
+        state="readonly")
+        file_entry.pack(fill=tk.X, expand=True, padx=10)
 
         upload_button = ttk.Button(upload_frame, text="Выбрать файл", command=self.browse_file,
                                    style="Upload.TButton")
-        upload_button.pack(side=tk.RIGHT, padx=5)
+        upload_button.pack(fill=tk.X, pady=(10, 0))
 
         # Создание фрейма для кнопки публикации
         button_frame = ttk.Frame(main_frame, style="Button.TFrame")
