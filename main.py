@@ -6,6 +6,13 @@ import os
 import nltk
 from nltk.corpus import stopwords
 import csv
+import ctypes
+
+
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)
+except Exception:
+    pass
 
 nltk.download('stopwords', quiet=True)  #Download stopwords quietly
 stop_words = set(stopwords.words('russian'))
@@ -23,7 +30,7 @@ def extract_problems(text):
 
 
 tokenizer = BertTokenizer.from_pretrained('bert-base-multilingual-cased')
-model_path = './Trained_Model/best_model_20241206_1521.pt' #Update with your model path
+model_path = 'trained_model/best_model_20241206_1458.pt'  #Update with your model path
 
 try:
     model = BertForSequenceClassification.from_pretrained('bert-base-multilingual-cased', num_labels=3)
@@ -75,6 +82,7 @@ class ChibbisCommentApp:
         self.root.geometry("900x280")
         self.root.resizable(False, False)
         self.root.configure(bg="#4682B4")
+        self.root.tk.call("tk", "scaling", 1.25)
         main_frame = ttk.Frame(self.root, padding="20", style="Main.TFrame")
         main_frame.pack(fill=tk.BOTH, expand=True)
         upload_frame = ttk.Frame(main_frame, style="Upload.TFrame")
