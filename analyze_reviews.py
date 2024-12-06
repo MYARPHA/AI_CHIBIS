@@ -74,7 +74,7 @@ class ChibbisCommentApp:
         result_label.pack(fill=tk.BOTH, expand=True)
 
         # Обновляем размер окна
-        self.root.geometry("450x650")  # Обновляем размер окна с учетом новой высоты
+        self.root.geometry("650x600")  # Обновляем размер окна с учетом новой высоты
 
 
 if __name__ == "__main__":
