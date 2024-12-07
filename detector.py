@@ -150,24 +150,24 @@ def predict(input_file, model_path, output_file="output_detector.csv"):
     print(f"Результаты сохранены в {output_file}")
 
 
-def map_predictions_to_labels(predictions):
+def map_predictions_to_labels(prediction):
     # Загружаем список проблем и достоинств из CSV файла
     file_path = "datasets/advantages_problems.csv"
     try:
         problems_and_advantages = pd.read_csv(file_path, sep=";")
     except FileNotFoundError:
         print(f"Ошибка: файл {file_path} не найден.")
-        return pd.Series({"Типы проблем": [], "Типы достоинств": []})
+        return {"Типы проблем": [], "Типы достоинств": []}
 
     # Разделяем на проблемы и достоинства
     problems = problems_and_advantages["Проблема"].dropna().tolist()
     advantages = problems_and_advantages["Достоинство"].dropna().tolist()
 
-    # Маппинг предсказаний на метки проблем и достоинств
-    problems_labels = [label for label in problems if label in predictions]
-    advantages_labels = [label for label in advantages if label in predictions]
+    # Проверяем, есть ли prediction в метках проблем или достоинств
+    problems_labels = [problems[prediction]] if prediction < len(problems) else []
+    advantages_labels = [advantages[prediction - len(problems)]] if prediction >= len(problems) and prediction < len(problems) + len(advantages) else []
 
-    return pd.Series({"Типы проблем": problems_labels, "Типы достоинств": advantages_labels})
+    return {"Типы проблем": problems_labels, "Типы достоинств": advantages_labels}
 
 
 # Точка входа
