@@ -1,131 +1,142 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-import torch
-from transformers import BertTokenizer, BertForSequenceClassification
 import os
-import nltk
-from nltk.corpus import stopwords
-import csv
+import pandas as pd
+from transformers import BertTokenizer, BertForSequenceClassification
+import torch
+import glob
 import ctypes
 
-
+# Настройка DPI для четкого отображения интерфейса
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(1)
 except Exception:
     pass
 
-nltk.download('stopwords', quiet=True)  #Download stopwords quietly
-stop_words = set(stopwords.words('russian'))
 
-def preprocess_text(text):
-    words = text.lower().split()
-    words = [word for word in words if word not in stop_words]
-    return " ".join(words)
+# Функция для выбора последней модели
+def get_latest_model_path(models_dir="./trained_model"):
+    if not os.path.exists(models_dir):
+        os.makedirs(models_dir)
+        return None
 
-#This function isn't used in the final output, so it can be removed for simplicity.
-def extract_problems(text):
-    problems = ['переварена', 'холодные']
-    found_problems = [problem for problem in problems if problem in text]
-    return found_problems
+    model_dirs = glob.glob(f"{models_dir}/best_model_*")
+    if not model_dirs:
+        return None
 
-
-tokenizer = BertTokenizer.from_pretrained('bert-base-multilingual-cased')
-model_path = 'trained_model/best_model_20241206_1458.pt'  #Update with your model path
-
-try:
-    model = BertForSequenceClassification.from_pretrained('bert-base-multilingual-cased', num_labels=3)
-    model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
-    print(f"Model loaded successfully from {model_path}")
-except FileNotFoundError:
-    messagebox.showerror("Error", f"Model not found at {model_path}. Please ensure the model file exists.")
-    exit(1)
-except Exception as e:
-    messagebox.showerror("Error", f"An error occurred while loading the model: {e}")
-    exit(1)
+    latest_model = max(model_dirs, key=os.path.getctime)
+    return latest_model
 
 
-def classify_review(text):
-    processed_text = preprocess_text(text)
-    inputs = tokenizer(processed_text, return_tensors="pt", truncation=True, padding="max_length", max_length=512)
-    with torch.no_grad():
-        outputs = model(**inputs)
-        pred = torch.argmax(outputs.logits, dim=1).item()
-    return pred
-
-
-def process_csv_and_save(file_path, output_file_path):
+# Функция предсказания типа отзыва
+def predict(input_file, model_path, output_file="./data/output.csv"):
+    """Предсказание типа отзыва."""
     try:
-        with open(file_path, 'r', encoding='utf-8') as infile, open(output_file_path, 'w', newline='', encoding='utf-8') as outfile:
-            reader = csv.reader(infile)
-            writer = csv.writer(outfile)
-            writer.writerow(["Review Type", "Review Text"])
-            next(reader) #Skip header if exists
+        # Загрузка модели и токенизатора
+        tokenizer = BertTokenizer.from_pretrained(model_path)
+        model = BertForSequenceClassification.from_pretrained(model_path)
 
-            for row in reader:
-                review_text = row[0]
-                category_pred = classify_review(review_text)
-                review_type = 0 if category_pred == 0 else 1 # Adjust mapping if needed
-                writer.writerow([review_type, '"' + review_text + '"'])
-        return True
-    except FileNotFoundError:
-        messagebox.showerror("Error", f"File not found: {file_path}")
-        return False
+        # Чтение данных
+        if not os.path.exists(input_file):
+            raise FileNotFoundError(f"Файл {input_file} не найден.")
+        data = pd.read_csv(input_file, sep=";")
+        if "Отзыв" not in data.columns:
+            raise KeyError("В файле отсутствует необходимый столбец 'Отзыв'.")
+
+        texts = data["Отзыв"].tolist()
+
+        # Токенизация
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model.to(device)
+        encodings = tokenizer(texts, truncation=True, padding=True, max_length=512, return_tensors="pt").to(device)
+
+        # Предсказание
+        with torch.no_grad():
+            outputs = model(**encodings)
+            predictions = torch.argmax(outputs.logits, dim=1)
+
+        # Преобразование предсказаний
+        mapping = {0: "позитивный", 1: "негативный", 2: "спорный", 3: "спам"}
+        data["Тип отзыва"] = predictions.cpu().numpy()
+        data["Тип отзыва"] = data["Тип отзыва"].apply(lambda x: mapping[x])
+
+        # Сохранение результатов с разделителем ";"
+        os.makedirs("./data", exist_ok=True)
+        data.to_csv(output_file, sep=";", index=False)
+        return output_file
+
     except Exception as e:
-        messagebox.showerror("Error", f"An error occurred: {e}")
-        return False
+        print(f"Ошибка обработки: {e}")
+        raise
 
 
+# Интерфейс приложения
 class ChibbisCommentApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Chibbis - Ваша оценка важна!")
-        self.root.geometry("900x280")
+        self.root.geometry("900x400")
         self.root.resizable(False, False)
         self.root.configure(bg="#4682B4")
         self.root.tk.call("tk", "scaling", 1.25)
+
         main_frame = ttk.Frame(self.root, padding="20", style="Main.TFrame")
         main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Загрузка файла
         upload_frame = ttk.Frame(main_frame, style="Upload.TFrame")
-        upload_frame.pack(fill=tk.X, padx=20, pady=(30, 15))
-        ttk.Label(upload_frame, text="Выберите файл для дальнейшей работы:",
-                  font=("Arial", 18, "bold"), foreground="#FFFFFF", background="#4682B4").pack(fill=tk.X, pady=(0, 10))
+        upload_frame.pack(fill=tk.X, padx=20, pady=(10, 15))
+        ttk.Label(upload_frame, text="Выберите файл для обработки:", font=("Arial", 14, "bold"),
+                  foreground="#FFFFFF", background="#4682B4").pack(anchor=tk.W)
         self.file_path = tk.StringVar()
-        file_entry = ttk.Entry(upload_frame, textvariable=self.file_path, width=40, font=("Arial", 12),
-                                state="readonly")
-        file_entry.pack(fill=tk.X, expand=True, padx=10)
-        upload_button = ttk.Button(upload_frame, text="Выбрать файл", command=self.browse_file,
-                                   style="Upload.TButton")
-        upload_button.pack(fill=tk.X, pady=(10, 0))
+        file_entry = ttk.Entry(upload_frame, textvariable=self.file_path, state="readonly", font=("Arial", 12), width=60)
+        file_entry.pack(fill=tk.X, padx=10, pady=(5, 0))
+        upload_button = ttk.Button(upload_frame, text="Выбрать файл", command=self.browse_file, style="Upload.TButton")
+        upload_button.pack(pady=(5, 0))
+
+        # Кнопка обработки
         button_frame = ttk.Frame(main_frame, style="Button.TFrame")
         button_frame.pack(fill=tk.X, padx=20, pady=(15, 30))
-        publish_button = ttk.Button(button_frame, text="Отправить файл", command=self.publish_file,
+        publish_button = ttk.Button(button_frame, text="Обработать файл", command=self.publish_file,
                                     style="Publish.TButton")
         publish_button.pack(fill=tk.X, expand=True)
+
+        # Результат
         self.result_frame = ttk.Frame(self.root, padding="20", style="Result.TFrame")
         self.result_frame.pack(fill=tk.BOTH, expand=True)
 
     def browse_file(self):
         path = filedialog.askopenfilename(
-            title="Select File",
-            filetypes=[("CSV files", "*.csv")],
+            title="Выберите файл",
+            filetypes=[("CSV файлы", "*.csv")],
             initialdir=os.getcwd()
         )
         self.file_path.set(path)
 
     def publish_file(self):
         file_path = self.file_path.get()
-        if not file_path.strip():
-            messagebox.showwarning("Внимание!", "Пожалуйста, выберите файл.")
+        model_path = get_latest_model_path()
+
+        if not model_path:
+            messagebox.showerror("Ошибка", "Не найдено сохранённых моделей. Пожалуйста, обучите модель перед использованием.")
             return
 
-        if process_csv_and_save(file_path, "data/output.csv"):
-            self.show_result("Файл обработан и сохранен в output.csv")
+        if not file_path.strip():
+            messagebox.showwarning("Внимание", "Выберите файл для обработки.")
+            return
+
+        try:
+            # Вызываем predict
+            output_file = predict(file_path, model_path, output_file="./data/output.csv")
+            self.show_result(f"Обработка завершена. Результат сохранён в {output_file}.")
+        except Exception as e:
+            messagebox.showerror("Ошибка обработки", f"Произошла ошибка: {e}")
 
     def show_result(self, text):
         for widget in self.result_frame.winfo_children():
             widget.destroy()
-        result_label = ttk.Label(self.result_frame, text=text, wraplength=400,
-                                 font=("Arial", 12), background="#FFFFFF")
+        result_label = ttk.Label(self.result_frame, text=text, wraplength=400, font=("Arial", 12),
+                                 background="#FFFFFF")
         result_label.pack(fill=tk.BOTH, expand=True)
 
 
@@ -136,10 +147,13 @@ if __name__ == "__main__":
     style.configure("Main.TFrame", background="#4682B4")
     style.configure("Upload.TFrame", background="#4682B4", borderwidth=1, relief="flat")
     style.configure("Button.TFrame", background="#4682B4")
-    style.configure("Publish.TButton", background="#FF8000", foreground="#FFFFFF", padding="10 5", font=("Arial", 14, "bold"))
+    style.configure("Publish.TButton", background="#FF8000", foreground="#FFFFFF", padding="10 5",
+                    font=("Arial", 14, "bold"))
     style.map("Publish.TButton", background=[("active", "#FFA500"), ("disabled", "#D0D0D0")])
     style.configure("Result.TFrame", background="#FFFFFF")
-    style.configure("Upload.TButton", background="#FFFFFF", foreground="#000000", padding="10 5", font=("Arial", 14, "bold"))
+    style.configure("Upload.TButton", background="#FFFFFF", foreground="#000000", padding="10 5",
+                    font=("Arial", 14, "bold"))
     style.map("Upload.TButton", background=[("active", "#4682B4"), ("disabled", "#D0D0D0")])
+
     app = ChibbisCommentApp(root)
     root.mainloop()
