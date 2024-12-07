@@ -89,7 +89,8 @@ class ChibbisCommentApp:
         ttk.Label(upload_frame, text="Выберите файл для обработки:", font=("Arial", 14, "bold"),
                   foreground="#FFFFFF", background="#4682B4").pack(anchor=tk.W)
         self.file_path = tk.StringVar()
-        file_entry = ttk.Entry(upload_frame, textvariable=self.file_path, state="readonly", font=("Arial", 12), width=60)
+        file_entry = ttk.Entry(upload_frame, textvariable=self.file_path, state="readonly", font=("Arial", 12),
+                               width=60)
         file_entry.pack(fill=tk.X, padx=10, pady=(5, 0))
         upload_button = ttk.Button(upload_frame, text="Выбрать файл", command=self.browse_file, style="Upload.TButton")
         upload_button.pack(pady=(5, 0))
@@ -118,7 +119,8 @@ class ChibbisCommentApp:
         model_path = get_latest_model_path()
 
         if not model_path:
-            messagebox.showerror("Ошибка", "Не найдено сохранённых моделей. Пожалуйста, обучите модель перед использованием.")
+            messagebox.showerror("Ошибка",
+                                 "Не найдено сохранённых моделей. Пожалуйста, обучите модель перед использованием.")
             return
 
         if not file_path.strip():
@@ -129,6 +131,9 @@ class ChibbisCommentApp:
             # Вызываем predict
             output_file = predict(file_path, model_path, output_file="./data/output.csv")
             self.show_result(f"Обработка завершена. Результат сохранён в {output_file}.")
+
+            # Открываем папку с результатом
+            self.open_output_folder("data")
         except Exception as e:
             messagebox.showerror("Ошибка обработки", f"Произошла ошибка: {e}")
 
@@ -138,6 +143,13 @@ class ChibbisCommentApp:
         result_label = ttk.Label(self.result_frame, text=text, wraplength=400, font=("Arial", 12),
                                  background="#FFFFFF")
         result_label.pack(fill=tk.BOTH, expand=True)
+
+    def open_output_folder(self, folder_path):
+        """Открыть папку с результатом в проводнике."""
+        try:
+            os.startfile(folder_path)
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось открыть папку: {e}")
 
 
 if __name__ == "__main__":
